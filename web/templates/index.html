@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+ <head>
+  <meta charset="UTF-8">
+  <title>UW MarsDial</title>
+  <script src="http://code.jquery.com/jquery-2.0.3.min.js"></script>
+  <script src="http://d3js.org/d3.v3.min.js"></script>
+  <script>
+   var svg, xScale, xAxis, xAxisGroup, yScale, yAxis, yAxisGroup;
+   jQuery(document).ready(onPageReady);
+   
+   function onPageReady(){
+    jQuery('select').change(onFormChange);
+    var margin = {top: 20, right: 20, bottom: 30, left: 50};
+    var width = 1000 - margin.left - margin.right;
+    var height = 500 - margin.top - margin.bottom;
+
+    xScale = d3.scale.linear().range([0, width]);
+    yScale = d3.scale.linear().range([height, 0]);
+
+    xAxis = d3.svg.axis().scale(xScale).orient('bottom');
+    yAxis = d3.svg.axis().scale(yScale).orient('left');
+
+    svg = d3
+     .select('#svgSection')
+     .append('svg')
+     .attr('width', width + margin.left + margin.right)
+     .attr('height', height + margin.top + margin.bottom)
+     .attr('preserveAspectRatio', 'xMinYMin')
+     .append('g')
+     .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    xAxisGroup = svg.append('g')
+     .attr('class', 'x axis')
+     .attr('transform', 'translate(0,' + height + ')');
+
+    yAxisGroup = svg.append('g')
+     .attr('class', 'y axis');
+     
+    xAxisGroup.append('text')
+     .attr('class', 'label')
+     .attr('x', width)
+     .attr('y', -6)
+     .style('text-anchor', 'end')
+     .text('Atmospheric Opacity');
+     
+    yAxisGroup.append('text')
+     .attr('class', 'label')
+     .attr('transform', 'rotate(-90)')
+     .attr('y', 6)
+     .attr('dy', '.71em')
+     .style('text-anchor', 'end')
+     .text('Scatter Ratio');    
+    
+    onFormChange();
+   }
+   function onPointClick(d){
+    infoDiv = jQuery('#info');
+    infoDiv.empty();
+    infoDiv.append('<pre>Javascript JSON Object:\n<code>'+JSON.stringify(d, undefined, 4) + '</code></pre>');
+    jQuery('html,body').animate( {scrollTop: infoDiv.offset().top}, 500);
+   }
+   function onFormChange(){
+    var params = jQuery('form').serialize();
+    plotData(params);
+   }
+   function plotData(params){
+    d3.json('/json/dataset/1?'+params,
+     function(error, data){
+      data.forEach(
+       function(d){
+        d.scatter_ratio = d.corrected_shadow_mean / d.corrected_light_mean;
+       }
+      );
+      
+      xScale.domain(d3.extent(data,
+       function(d){
+        return d.atmos_opacity;
+       }
+      )).nice();
+      
+      yScale.domain(d3.extent(data,
+       function(d){
+        return d.scatter_ratio;
+       }
+      )).nice();
+         
+      xAxisGroup.call(xAxis);
+      yAxisGroup.call(yAxis);
+      
+      var dots = svg.selectAll('.dot').data(data, function(d){ return d.id; });
+       
+      dots.enter()
+       .append('circle')
+       .attr('class', 'dot')
+       .attr('r', 2)
+       .style('opacity', 0)
+       .attr('cx', function(d){ return xScale(d.atmos_opacity); })
+       .attr('cy', function(d){ return yScale(d.scatter_ratio); })
+       .attr('fill',
+        function(d){
+         sl = d.solar_longitude
+         if (0 < sl && sl <= 90){ return 'red'; }
+         else if (90 < sl && sl <= 180){ return 'green'; }
+         else if (180 < sl && sl <= 270){ return 'blue'; }
+         else {return 'yellow';}
+        })
+       .on('click', onPointClick)
+       .on('mouseover',
+        function(d){
+         d3.select('#svgSection').select('p').text(d.id);
+        })
+       .on('mouseout',
+         function(d){
+          d3.select('#svgSection').select('p').text('Click on a point for more information...');
+         });
+       
+       dots.transition()
+        .style('opacity', 1).duration(1000)
+        .attr('cx', function(d){ return xScale(d.atmos_opacity); })
+        .attr('cy', function(d){ return yScale(d.scatter_ratio); });
+       
+       dots.exit().transition().style('opacity', 0).remove();
+     }
+    );
+   }
+  </script>
+  <style>
+   body {
+    font-family: sans-serif;
+   }
+   select {
+    font-size: 32px;
+    background: transparent;
+    border: 0px dashed black;
+    margin: 2px;
+   }
+   select:active, select:focus{
+    border: 0px solid green;
+   }
+   
+   #svgSection {
+    text-align: center;
+   }
+   svg {
+    font-size: 16px;
+    
+   }
+   .axis path,
+   .axis line {
+    fill: none;
+    stroke: #000;
+    shape-rendering: crispEdges;
+   }
+   
+   .dot, .dot:hover {
+    stroke: black;
+    stroke-width: .5px;
+    cursor: pointer;
+   }
+   .section{
+    font-size: 32px;
+    width: 1000px;
+    border-top: 1px dashed green;
+    border-bottom: 1px dashed green;
+    padding: 5px;
+    margin: 0 auto;
+   }
+  </style>
+ </head>
+ <body>
+  <div class="section">
+   <form>
+    <label for="filter_id">Plot for filter</label>
+    <select name="filter_id" required="">
+      <optgroup label="Right">
+      <option value="R1">R1 (440 nm)</option>
+      <option value="R2">R2 (754 nm)</option>
+      <option value="R3">R3 (803 nm)</option>
+      <option value="R4">R4 (864 nm)</option>
+      <option value="R5">R5 (903 nm)</option>
+      <option value="R6">R6 (933 nm)</option>
+      <option value="R7">R7 (1001 nm)</option>
+     </optgroup>
+     <optgroup label="Left">
+      <option value="L1">L1 (empty)</option>
+      <option value="L2" selected="">L2 (753 nm)</option>
+      <option value="L3">L3 (673 nm)</option>
+      <option value="L4">L4 (602 nm)</option>
+      <option value="L5">L5 (535 nm)</option>
+      <option value="L6">L6 (483 nm)</option>
+      <option value="L7">L7 (440 nm)</option>
+     </optgroup>
+    </select>
+    <label for="host_id">on</label>
+    <select name="host_id" required="">
+     <option value="MER1" selected="">MER1</option>
+     <option value="MER2">MER2</option>
+    </select>
+    <span>with</span>
+    <br>
+    <label for="min_ltst_h">LTST between</label>
+    <span>
+    <select name="min_ltst_h" required="">
+     <option value="00">00</option>
+     <option value="01">01</option>
+     <option value="02">02</option>
+     <option value="03">03</option>
+     <option value="04">04</option>
+     <option value="05">05</option>
+     <option value="06">06</option>
+     <option value="07">07</option>
+     <option value="08">08</option>
+     <option value="09">09</option>
+     <option value="10">10</option>
+     <option value="11" selected="">11</option>
+     <option value="12">12</option>
+     <option value="13">13</option>
+     <option value="14">14</option>
+     <option value="15">15</option>
+     <option value="16">16</option>
+     <option value="17">17</option>
+     <option value="18">18</option>
+     <option value="19">19</option>
+     <option value="20">20</option>
+     <option value="21">21</option>
+     <option value="22">22</option>
+     <option value="23">23</option>
+    </select>
+    :
+    <select name="min_ltst_m" required="">
+     <option value="00" selected="">00</option>
+     <option value="05">05</option>
+     <option value="10">10</option>
+     <option value="15">15</option>
+     <option value="20">20</option>
+     <option value="25">25</option>
+     <option value="30">30</option>
+     <option value="35">35</option>
+     <option value="40">40</option>
+     <option value="45">45</option>
+     <option value="50">50</option>
+     <option value="55">55</option>
+    </select>
+    :
+    <select name="min_ltst_s" required="">
+     <option value="00" selected="">00</option>
+     <option value="05">05</option>
+     <option value="10">10</option>
+     <option value="15">15</option>
+     <option value="20">20</option>
+     <option value="25">25</option>
+     <option value="30">30</option>
+     <option value="35">35</option>
+     <option value="40">40</option>
+     <option value="45">45</option>
+     <option value="50">50</option>
+     <option value="55">55</option>
+    </select>
+    </span>
+    <label for="ltst_max_h">and</label>
+    <span>
+    <select name="max_ltst_h" required="">
+     <option value="00">00</option>
+     <option value="01">01</option>
+     <option value="02">02</option>
+     <option value="03">03</option>
+     <option value="04">04</option>
+     <option value="05">05</option>
+     <option value="06">06</option>
+     <option value="07">07</option>
+     <option value="08">08</option>
+     <option value="09">09</option>
+     <option value="10">10</option>
+     <option value="11">11</option>
+     <option value="12">12</option>
+     <option value="13" selected="">13</option>
+     <option value="14">14</option>
+     <option value="15">15</option>
+     <option value="16">16</option>
+     <option value="17">17</option>
+     <option value="18">18</option>
+     <option value="19">19</option>
+     <option value="20">20</option>
+     <option value="21">21</option>
+     <option value="22">22</option>
+     <option value="23">23</option>
+    </select>
+    :
+    <select name="max_ltst_m" required="">
+     <option value="00" selected="">00</option>
+     <option value="05">05</option>
+     <option value="10">10</option>
+     <option value="15">15</option>
+     <option value="20">20</option>
+     <option value="25">25</option>
+     <option value="30">30</option>
+     <option value="35">35</option>
+     <option value="40">40</option>
+     <option value="45">45</option>
+     <option value="50">50</option>
+     <option value="55">55</option>
+    </select>
+    :
+    <select name="max_ltst_s" required="">
+     <option value="00" selected="">00</option>
+     <option value="05">05</option>
+     <option value="10">10</option>
+     <option value="15">15</option>
+     <option value="20">20</option>
+     <option value="25">25</option>
+     <option value="30">30</option>
+     <option value="35">35</option>
+     <option value="40">40</option>
+     <option value="45">45</option>
+     <option value="50">50</option>
+     <option value="55">55</option>
+    </select>
+    </span>
+    <br>
+    <label for="min_pixels">where at least</label>
+    <select name="min_pixels" required="">
+     <option value="100">100</option>
+     <option value="150">150</option>
+     <option value="200" selected="">200</option>
+     <option value="250">250</option>
+     <option value="300">300</option>
+     <option value="350">350</option>
+     <option value="400">400</option>
+     <option value="450">450</option>
+     <option value="500">500</option>
+     <option value="550">550</option>
+     <option value="600">600</option>
+     <option value="650">650</option>
+     <option value="700">700</option>
+     <option value="750">750</option>
+     <option value="800">800</option>
+     <option value="850">850</option>
+     <option value="900">900</option>
+     <option value="950">950</option>
+     <option value="1000">1000</option>
+    </select>
+    <span>pixels were present in the shadowed and non-shadowed region.</span>
+   </form>
+  </div>
+  <div id="svgSection">
+  <p style="font-style: oblique;">Click on a point for more information...</p>
+  </div>
+  <div class="section" id="infoSection">
+   <header style="text-align:center;">
+    <span style="text-decoration:underline;">Info</span>
+   </header>
+   <div id="info"><div>
+  </div>
+ </body>
+</html>
